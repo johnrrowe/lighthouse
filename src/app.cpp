@@ -32,7 +32,7 @@ std::optional<std::string> refresh_token(CURL* curl)
     
     const std::string_view body {
         "grant_type=refresh_token&"
-        "refresh_token=AQC_CIm49TQyNFy685RfuhlgqFTLIEG6j21K78yx2NMURnqC0xj5Va45dU1GVIc-BQQ0JxU9JC1Db2oOJYtJui-X05IOxOcanHeZMxC5oJ90WcjHP9XnBXroAK3MtL6AbbQ"
+        "refresh_token=AQCEPk6Vm62YLOxZiyFXSpZgmwUQUFgcRLffqOp39JaVamWJxHPV_EN3uzKbrwhqOXL_K4_zLGm7mFRkOUBt90uRH37quSxWPLUZs7iucmU-_uLS_ffl1ewvpuWXFPZnalI"
     };
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.size()); 
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data()); 
@@ -120,7 +120,7 @@ int main()
         //     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
         //     const std::string_view body {
         //         "grant_type=authorization_code&"
-        //         "code=AQCKu6fGDLcPknlxsm-X9JCdlkJqAS06InL-OOXo17lW4uAj_Y7RV448Ij7VfVa_c3WH5a9vknTtisvucsxj-Nav09Quop3cY31W-fQ2MC_TaEWIcs8mxikDRxVoup3WodurwRdPTRV0OoVlUcAg1C_mDrsQVsz3l_6ioUOHlFmKsc0ueXM7uXRm1h8xeIkAKHfaSVgsY9U&"
+        //         "code=AQC7qVi9ZqqJs_qxl9yyYChnk4drWrfwYAQkkIpOg7ZOCRQxWJKrXabapvLeUY12hR0co9qhWGU0L6_-3CKSzF8EwX8NBH3WYNNBH2hVgsip_zcOofMhHpEbR89C5B4ePv4ZiOP-aczAlcITLTjrrdzEZz90xnMFaFdjnUWJiBwIKqWb4XdmNs4fuLXe--Pg0Q84NHuEbj4&"
         //         "redirect_uri=https://www.google.com/"
         //     };
         //     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.size()); 
@@ -138,7 +138,12 @@ int main()
             while (auto track_info = request_track_info(curl, *access_token))
             { 
                 std::system("clear");
-                printf("%s\n", track_info->c_str());
+
+                if (!track_info->empty())
+                    printf("%s\n", track_info->c_str());
+                else 
+                    printf("No currently active song\n");
+
                 sleep(1);
             }
 
