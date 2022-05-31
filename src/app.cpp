@@ -1,18 +1,20 @@
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <optional>
+#include <queue>
+#include <ranges>
 #include <string>
 #include <sstream>
 #include <string_view>
+#include <thread>
 #include <vector>
-#include <ranges>
 
-#include <curl/curl.h>
 #include <nlohmann/json.hpp>
+#include <httplib.h>
 
 // for convenience
 using json = nlohmann::json;
-
 
 size_t save_response(char * ptr, size_t size, size_t nmemb, void *userdata) 
 {
@@ -22,67 +24,123 @@ size_t save_response(char * ptr, size_t size, size_t nmemb, void *userdata)
 }
 
 
-std::optional<std::string> refresh_token(CURL* curl)
+template <typename T>
+class Queue
 {
-    curl_easy_setopt(curl, CURLOPT_URL, "https://accounts.spotify.com/api/token");
-    curl_easy_setopt(curl, CURLOPT_POST, 1L); 
-    curl_slist *list = NULL;
-    list = curl_slist_append(list, "Authorization: Basic OTg5NjE2NmQ0NDZlNGI0NTkwZjI4ZjIyMzIxM2NhYmQ6ZDc1ZjZjMGQ0ZjY4NGQyMGE1ODdhZjNiMGYzYmY1MWU=");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-    
-    const std::string_view body {
-        "grant_type=refresh_token&"
-        "refresh_token=AQCEPk6Vm62YLOxZiyFXSpZgmwUQUFgcRLffqOp39JaVamWJxHPV_EN3uzKbrwhqOXL_K4_zLGm7mFRkOUBt90uRH37quSxWPLUZs7iucmU-_uLS_ffl1ewvpuWXFPZnalI"
-    };
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.size()); 
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data()); 
-    std::stringstream buffer;
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, save_response);
+public:
 
-    if (curl_easy_perform(curl) != CURLE_OK)
-        return std::nullopt;
-    
-    try
+    void send(const T& msg)
     {
-        auto obj { json::parse(buffer.str()) };
-        return obj[0]["access_token"];
+        std::lock_guard<std::mutex> lock { mtx };
+        queue.push(msg);
     }
-    catch(const std::exception& e)
+
+    std::optional<T> receive()
     {
-        return std::nullopt;
+
+        std::lock_guard<std::mutex> lock { mtx };
+
+        if (queue.empty())
+        {
+            return std::nullopt;
+        }
+        else
+        {
+            T msg { queue.front() };
+            queue.pop();
+            return msg;
+        }
     }
+
+private:
+
+    std::queue<T> queue;
+    std::mutex mtx;
+};
+
+
+std::optional<std::string> reauthorize_user(httplib::Client& client)
+{
+    httplib::Params params {
+        { "client_id", "9896166d446e4b4590f28f223213cabd&" },
+        { "scope", "user-read-currently-playing&" },
+        { "response_type", "code&" },
+        { "redirect_uri", "http://localhost:8080/authorization_code/" }
+    };
+
+    const httplib::Result response { client.Get(
+        "/authorize",
+        params,
+        httplib::Headers{}
+    ) };
+    if (!response)
+        return std::nullopt;
+
+    auto redirect_header { response->headers.find("location") }; 
+    if (redirect_header == response->headers.end())
+        return std::nullopt;
+
+    std::string redirect { redirect_header->second };
+
+    const std::string_view path = "/login?continue=";
+    size_t path_start { redirect.find(path) };
+    size_t delimiter { redirect.find_first_of(":/&?=", path_start + path.size()) };
+
+    auto url_encode = [] (char c) -> std::string {
+        switch (c)
+        {
+        case '&':
+            return "26";
+        case '/':
+            return "2F";
+        case ':':
+            return "3A";
+        case '=':
+            return "3D";
+        case '?':
+            return "3F";
+        default:
+            throw std::runtime_error("Error failed to url encode this char: %c" + c);
+        }
+    }; 
+
+    while (delimiter != std::string::npos)
+    {
+        redirect.insert(delimiter + 1, url_encode(redirect[delimiter]));
+        redirect[delimiter] = '%';
+        delimiter = redirect.find_first_of(":/&?=", delimiter);
+    }
+
+    return redirect;
 }
 
 
-std::optional<std::string> request_track_info(CURL* curl, std::string const& access_token)
+std::optional<std::string> request_track_info(httplib::Client& client, std::string const& access_token)
 {
-    curl_easy_setopt(curl, CURLOPT_URL, "https://api.spotify.com/v1/me/player/currently-playing");
-    curl_slist *list = NULL;
-    list = curl_slist_append(list, ("Authorization: Bearer " + access_token).c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-    std::stringstream buffer;
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, save_response);
+    httplib::Result response { client.Get("/v1/me/player/currently-playing", httplib::Headers{
+        { "Authorization", "Bearer " + access_token }
+    }) };
 
-    if (curl_easy_perform(curl) != CURLE_OK)
+    if (!response)
         return std::nullopt;
+
+    if (response->body.empty())
+        return "No active track";
 
     try 
     {
-        // json current_track = json::parse(buffer.str())["item"];
-        // std::stringstream info;
+        json current_track = json::parse(response->body)["item"];
+        std::stringstream info;
 
-        // std::string track_name { current_track["name"] };
-        // info << "Currently Playing " << track_name << '\n';
+        std::string track_name { current_track["name"] };
+        info << "Currently Playing " << track_name << '\n';
 
-        // auto& artists (current_track["artists"]);
-        // info << "By " << std::string((*artists.begin())["name"]);
-        // for (auto& artist : std::ranges::subrange(++artists.begin(), artists.end()))
-        //     info << ", " << std::string(artist["name"]);
+        auto& artists (current_track["artists"]);
+        info << "By " << std::string((*artists.begin())["name"]);
+        for (auto& artist : std::ranges::subrange(++artists.begin(), artists.end()))
+            info << ", " << std::string(artist["name"]);
 
-        // return info.str();
-        return buffer.str();
+        return info.str();
     }
     catch (...)
     {
@@ -93,69 +151,82 @@ std::optional<std::string> request_track_info(CURL* curl, std::string const& acc
 
 int main()
 {
-    CURL *curl = curl_easy_init();
-    if(curl) 
-    {
-        // {
-        //     curl_easy_setopt(curl, CURLOPT_URL, 
-        //         "https://accounts.spotify.com/authorize?"
-        //         "client_id=9896166d446e4b4590f28f223213cabd&"
-        //         "scope=user-read-currently-playing&"
-        //         "response_type=code&"
-        //         "redirect_uri=https://www.google.com/"
-        //     );
-        //     curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
-        //     curl_easy_perform(curl);
-        //     printf("Requested authorization\n\n");
-        // }
+    using namespace httplib;
+    Client account_client ("https://accounts.spotify.com");
+    Server svr;
 
-        // curl_easy_reset(curl);
+    Queue<std::string> access_token_ch;
 
-        // {
-        //     curl_easy_setopt(curl, CURLOPT_URL, "https://accounts.spotify.com/api/token");
-        //     curl_easy_setopt(curl, CURLOPT_POST, 1L); 
-        //     curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
-        //     curl_slist *list = NULL;
-        //     list = curl_slist_append(list, "Authorization: Basic OTg5NjE2NmQ0NDZlNGI0NTkwZjI4ZjIyMzIxM2NhYmQ6ZDc1ZjZjMGQ0ZjY4NGQyMGE1ODdhZjNiMGYzYmY1MWU=");
-        //     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-        //     const std::string_view body {
-        //         "grant_type=authorization_code&"
-        //         "code=AQC7qVi9ZqqJs_qxl9yyYChnk4drWrfwYAQkkIpOg7ZOCRQxWJKrXabapvLeUY12hR0co9qhWGU0L6_-3CKSzF8EwX8NBH3WYNNBH2hVgsip_zcOofMhHpEbR89C5B4ePv4ZiOP-aczAlcITLTjrrdzEZz90xnMFaFdjnUWJiBwIKqWb4XdmNs4fuLXe--Pg0Q84NHuEbj4&"
-        //         "redirect_uri=https://www.google.com/"
-        //     };
-        //     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.size()); 
-        //     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data()); 
-        //     curl_easy_perform(curl);
-        //     printf("\nRequested access token\n\n");
-        // }
+    svr.Get("/authorization_code/", [&account_client, &access_token_ch](Request const& req, Response &) {
+        auto code = req.params.find("code");
+        if (code == req.params.end())
+            return;
 
-        // curl_easy_reset(curl);
+        httplib::Headers headers {
+            { "Authorization", "Basic OTg5NjE2NmQ0NDZlNGI0NTkwZjI4ZjIyMzIxM2NhYmQ6ZDc1ZjZjMGQ0ZjY4NGQyMGE1ODdhZjNiMGYzYmY1MWU=" },
+        };
 
-        while (auto access_token = refresh_token(curl))
+        const std::string body {
+            "grant_type=authorization_code&code=" + code->second + "&redirect_uri=http://localhost:8080/authorization_code/"
+        };
+
+        const httplib::Result response { account_client.Post(
+            "/api/token",
+            headers,
+            body.data(),
+            body.size(),
+            "application/x-www-form-urlencoded"
+        ) };
+
+        if (response)
         {
-            curl_easy_reset(curl);
-
-            while (auto track_info = request_track_info(curl, *access_token))
-            { 
-                std::system("clear");
-
-                if (!track_info->empty())
-                    printf("%s\n", track_info->c_str());
-                else 
-                    printf("No currently active song\n");
-
-                sleep(1);
+            try
+            {
+                auto obj { json::parse(response->body) };
+                access_token_ch.send(std::string(obj[0]["access_token"]));
             }
+            catch (...)
+            {
 
-            std::system("clear");
-            printf("Failed to request track info\n");
-            curl_easy_reset(curl);
+            }
         }
-        printf("\nFailed to refresh access token\n");
-        // curl_free(body);
-        curl_easy_cleanup(curl);
-    }
-    printf("\n");
+    });
+
+    std::jthread client_thread { 
+        [&account_client, &access_token_ch] () 
+        {
+            if (auto redirect = reauthorize_user(account_client))
+                printf("%s\n", redirect->c_str());
+
+            httplib::Client client { "https://api.spotify.com" };
+            std::optional<std::string> access_token;
+
+            while (true)
+            {
+                if (access_token)
+                {
+                    if (auto info = request_track_info(client, *access_token))
+                    {
+                        std::system("clear");
+                        printf("%s\n", info->c_str());
+                    }
+                    else
+                    {
+                        access_token = std::nullopt;
+                    }
+                }
+                else
+                {
+                    if (access_token = access_token_ch.receive())
+                        printf("\nNew Access Token: %s\n", access_token->c_str());
+                }
+
+                usleep(500'000);
+            } 
+        } 
+    };
+
+    svr.listen("127.0.0.1", 8080);
 
     return 0;
 }

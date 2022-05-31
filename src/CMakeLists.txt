@@ -7,23 +7,28 @@ add_executable(app
 )
 
 
-find_package(CURL REQUIRED)
+find_package(OpenSSL REQUIRED)
+
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.10.5/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
+FetchContent_Declare (httplib URL https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.10.7.tar.gz)
+FetchContent_MakeAvailable(httplib)
 
 
 target_include_directories(app
     PRIVATE
     ${SOURCE_DIR}
-    ${CURL_INCLUDE_DIR}
+    ${OPENSSL_INCLUDE_DIR}
 )
-
-FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.10.5/json.tar.xz)
-FetchContent_MakeAvailable(json)
 
 
 target_link_libraries(app
     PRIVATE
-    ${CURL_LIBRARIES}
     nlohmann_json::nlohmann_json
+    httplib::httplib
+    ${OPENSSL_SSL_LIBRARY}
+    ${OPENSSL_CRYPTO_LIBRARY}
 )
 
 
@@ -59,6 +64,9 @@ target_compile_options(app
     -Wstrict-overflow=5 
     -Wswitch-default 
     -Wno-missing-field-initializers 
+    -Wno-switch-default 
+    -Wno-cast-qual 
+    -Wno-strict-overflow 
 )
 
 
