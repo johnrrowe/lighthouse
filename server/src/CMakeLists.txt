@@ -1,9 +1,9 @@
-set(APP_SOURCES
+set(SERVER_SOURCES
 )
 
-add_executable(app
-    app.cpp
-    ${APP_SOURCES}
+add_executable(server
+    server.cpp
+    ${SERVER_SOURCES}
 )
 
 
@@ -16,14 +16,13 @@ FetchContent_Declare (httplib URL https://github.com/yhirose/cpp-httplib/archive
 FetchContent_MakeAvailable(httplib)
 
 
-target_include_directories(app
+target_include_directories(server
     PRIVATE
-    ${SOURCE_DIR}
     ${OPENSSL_INCLUDE_DIR}
 )
 
 
-target_link_libraries(app
+target_link_libraries(server
     PRIVATE
     nlohmann_json::nlohmann_json
     httplib::httplib
@@ -32,7 +31,7 @@ target_link_libraries(app
 )
 
 
-target_compile_options(app 
+target_compile_options(server 
     PRIVATE
 
     #FEATURES
@@ -63,18 +62,14 @@ target_compile_options(app
     -Wsign-promo  
     -Wstrict-overflow=5 
     -Wswitch-default 
-    -Wno-missing-field-initializers 
-    -Wno-switch-default 
-    -Wno-cast-qual 
-    -Wno-strict-overflow 
 )
 
 
-target_link_options(app
+target_link_options(server
     PRIVATE
 )
 
 
-target_compile_definitions(app 
+target_compile_definitions(server 
     PRIVATE 
 )

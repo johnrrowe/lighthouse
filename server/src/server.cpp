@@ -13,7 +13,12 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch-default"
+#pragma GCC diagnostic ignored "-Wcast-qual"
 #include <httplib.h>
+#pragma GCC diagnostic pop
 
 // for convenience
 using json = nlohmann::json;
