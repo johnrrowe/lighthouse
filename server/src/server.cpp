@@ -451,7 +451,7 @@ int main()
         {
             std::array<char, 256> output { '\0' };
             std::ranges::copy_n(line->begin(), std::min(output.size(), line->size()), output.begin());
-            write(serial_port, output.data(), output.size());
+            write(serial_port, output.data(), output.size()-1);
         }
 
         // n is the number of bytes read. n may be 0 if no bytes were received, and can also be -1 to signal an error.
