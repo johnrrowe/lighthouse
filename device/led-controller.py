@@ -1,4 +1,9 @@
 # Example using PIO to drive a set of WS2812 LEDs.
+def natural_numbers():
+    i = 1
+    while (True):
+        yield i
+        i += 1
 
 import array, time
 from machine import Pin
@@ -73,7 +78,7 @@ def wheel(pos):
 
 
 def rainbow_cycle(wait):
-    for j in range(255):
+    for j in natural_numbers():
         for i in range(NUM_LEDS):
             rc_index = (i * 256 // NUM_LEDS) + j
             pixels_set(i, wheel(rc_index & 255))

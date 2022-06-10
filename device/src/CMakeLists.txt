@@ -6,7 +6,6 @@ add_executable(device
     ${DEVICE_SOURCES}
 )
 
-pico_add_extra_outputs(device)
 
 target_include_directories(device
     PRIVATE
@@ -17,7 +16,16 @@ target_include_directories(device
 target_link_libraries(device
     PRIVATE
     pico_stdlib
+    pico_multicore
 )
+
+
+pico_enable_stdio_usb(device 1)
+pico_enable_stdio_uart(device 0)
+
+# pico_generate_pio_header(device ${CMAKE_CURRENT_LIST_DIR}/controller.pio)
+
+pico_add_extra_outputs(device)
 
 
 target_compile_options(device 
@@ -34,6 +42,9 @@ target_compile_options(device
     -Wctor-dtor-privacy 
     -Wsign-promo  
     -Wstrict-overflow=5 
+    -Wcast-qual 
+    -Wsign-conversion 
+    -Wswitch-default 
     >
 
     -O2 
@@ -46,15 +57,11 @@ target_compile_options(device
     -Werror 
     -Winit-self 
     -Wcast-align 
-    -Wcast-qual 
     -Wdisabled-optimization 
     -Wlogical-op 
     -Wmissing-include-dirs 
     -Wfloat-equal 
     -Wredundant-decls   
-    -Wsign-conversion 
-    -Wswitch-default 
-
     -Wno-pedantic 
 )
 

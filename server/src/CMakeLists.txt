@@ -58,7 +58,7 @@ target_compile_options(server
     -Wctor-dtor-privacy 
     -Wfloat-equal 
     -Wredundant-decls   
-    -Wsign-conversion 
+    # -Wsign-conversion 
     -Wsign-promo  
     -Wstrict-overflow=5 
     -Wswitch-default 

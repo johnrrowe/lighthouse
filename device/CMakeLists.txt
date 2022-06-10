@@ -1,12 +1,16 @@
-include(FetchContent)
-FetchContent_Declare(pico_sdk URL https://github.com/raspberrypi/pico-sdk/archive/refs/tags/1.3.1.tar.gz)
-FetchContent_MakeAvailable(pico_sdk)
+cmake_minimum_required(VERSION 3.13)
+# initialize pico-sdk from GIT
+# (note this can come from environment, CMake cache etc)
+set(PICO_SDK_FETCH_FROM_GIT on)
+
+# pico_sdk_import.cmake is a single file copied from this SDK
+# note: this must happen before project()
+include(pico_sdk_import.cmake)
 
 project(lighthouse_device)
 
 pico_sdk_init()
 
-cmake_minimum_required(VERSION 3.10)
 set(GCC_MINIMUM_REQUIRED "10")
 message(${CMAKE_CXX_COMPILER_ID} " " ${CMAKE_CXX_COMPILER_VERSION})
 

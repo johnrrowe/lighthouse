@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -235,121 +236,232 @@ std::string get_track_analysis(httplib::Client& client, std::string const& acces
 }
 
 
-int main()
+// int main()
+// {
+//     httplib::Client account_client ("https://accounts.spotify.com");
+//     httplib::Server svr;
+
+//     Queue<std::string> access_token_ch;
+
+//     svr.Get("/authorization_code/", [&account_client, &access_token_ch](httplib::Request const& req, httplib::Response &) {
+//         auto code = req.params.find("code");
+//         if (code == req.params.end())
+//             return;
+
+//         httplib::Headers headers {
+//             { "Authorization", "Basic OTg5NjE2NmQ0NDZlNGI0NTkwZjI4ZjIyMzIxM2NhYmQ6ZDc1ZjZjMGQ0ZjY4NGQyMGE1ODdhZjNiMGYzYmY1MWU=" },
+//         };
+
+//         const std::string body {
+//             "grant_type=authorization_code&code=" + code->second + "&redirect_uri=http://localhost:8080/authorization_code/"
+//         };
+
+//         const httplib::Result response { account_client.Post(
+//             "/api/token",
+//             headers,
+//             body.data(),
+//             body.size(),
+//             "application/x-www-form-urlencoded"
+//         ) };
+
+//         if (response)
+//         {
+//             try
+//             {
+//                 auto obj { json::parse(response->body) };
+//                 access_token_ch.send(std::string(obj[0]["access_token"]));
+//             }
+//             catch (...)
+//             {
+
+//             }
+//         }
+//     });
+
+//     std::jthread client_thread { 
+//         [&account_client, &access_token_ch] () 
+//         {
+//             httplib::Client client { "https://api.spotify.com" };
+
+//             std::optional<std::string> redirect_link;
+//             while (!redirect_link)
+//             {
+//                 if (redirect_link = reauthorize_user(account_client))
+//                     std::cout << *redirect_link << '\n';
+//                 else
+//                     usleep(500'000);
+//             }
+
+//             while (true)
+//             {
+//                 std::optional<std::string> access_token;
+
+//                 while (!access_token)
+//                 {
+//                     if (access_token = access_token_ch.receive())
+//                         std::cout << "\nNew Access Token: " << *access_token << '\n';
+//                     else
+//                         usleep(500'000);
+//                 }
+
+//                 std::string recent_track_id;
+
+//                 while (auto track_response = request_track_info(client, *access_token))
+//                 {
+//                     auto res { parse_current_track(*track_response) };
+
+//                     if (auto* current_track = std::get_if<CurrentTrack>(&res))
+//                     {
+//                         std::stringstream track_info;
+
+//                         track_info << "Now playing " << current_track->name
+//                                    << "\nBy " << current_track->artist_names.front(); 
+//                         for (auto const& name : std::ranges::subrange(current_track->artist_names.begin() + 1, current_track->artist_names.end()))
+//                             track_info << ", " << name;
+
+//                         track_info << "\n\nTrack Info\n\n" << get_track_analysis(client, *access_token, current_track->id);
+
+//                         if (recent_track_id != current_track->id)
+//                         {
+//                             recent_track_id = current_track->id;
+//                             display(track_info.str());
+//                         }
+//                     }
+//                     else if (auto* err = std::get_if<ResponseError>(&res))
+//                     {
+//                         recent_track_id = "";
+//                         switch (*err) 
+//                         {
+//                         case ResponseError::NoContent:
+//                             display("No currently active track");
+//                             break;
+//                         case ResponseError::ParseFailure:
+//                             display("Failed to parse current track response");
+//                             break;
+//                         default:
+//                             display("InternalError: Unhandled ResponseError when requesting current track");
+//                             break;
+//                         }
+//                     }
+
+//                     usleep(500'000);
+//                 }
+//             } 
+//         } 
+//     };
+
+//     svr.listen("127.0.0.1", 8080);
+
+//     return 0;
+// }
+
+
+// C library headers
+#include <stdio.h>
+#include <string.h>
+
+// Linux headers
+#include <fcntl.h> // Contains file controls like O_RDWR
+#include <errno.h> // Error integer and strerror() function
+#include <termios.h> // Contains POSIX terminal control definitions
+#include <unistd.h> // write(), read(), close()
+
+int main() 
 {
-    httplib::Client account_client ("https://accounts.spotify.com");
-    httplib::Server svr;
+    // Open the serial port. Change device path as needed (currently set to an standard FTDI USB-UART cable type device)
+    int serial_port = open("/dev/ttyACM0", O_RDWR);
+    if(serial_port < 0) {
+        printf("Error %i from open: %s\n", errno, strerror(errno));
+        return 1;
+    }
 
-    Queue<std::string> access_token_ch;
+    // Create new termios struct, we call it 'tty' for convention
+    struct termios tty;
 
-    svr.Get("/authorization_code/", [&account_client, &access_token_ch](httplib::Request const& req, httplib::Response &) {
-        auto code = req.params.find("code");
-        if (code == req.params.end())
-            return;
+    // Read in existing settings, and handle any error
+    if(tcgetattr(serial_port, &tty) != 0) {
+        printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+        return 1;
+    }
 
-        httplib::Headers headers {
-            { "Authorization", "Basic OTg5NjE2NmQ0NDZlNGI0NTkwZjI4ZjIyMzIxM2NhYmQ6ZDc1ZjZjMGQ0ZjY4NGQyMGE1ODdhZjNiMGYzYmY1MWU=" },
-        };
+    tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
+    tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
+    tty.c_cflag &= ~CSIZE; // Clear all bits that set the data size 
+    tty.c_cflag |= CS8; // 8 bits per byte (most common)
+    tty.c_cflag &= ~CRTSCTS; // Disable RTS/CTS hardware flow control (most common)
+    tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
 
-        const std::string body {
-            "grant_type=authorization_code&code=" + code->second + "&redirect_uri=http://localhost:8080/authorization_code/"
-        };
+    tty.c_lflag &= ~ICANON;
+    tty.c_lflag &= ~ECHO; // Disable echo
+    tty.c_lflag &= ~ECHOE; // Disable erasure
+    tty.c_lflag &= ~ECHONL; // Disable new-line echo
+    tty.c_lflag &= ~ISIG; // Disable interpretation of INTR, QUIT and SUSP
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Turn off s/w flow ctrl
+    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL); // Disable any special handling of received bytes
 
-        const httplib::Result response { account_client.Post(
-            "/api/token",
-            headers,
-            body.data(),
-            body.size(),
-            "application/x-www-form-urlencoded"
-        ) };
+    tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
+    tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
+    // tty.c_oflag &= ~OXTABS; // Prevent conversion of tabs to spaces (NOT PRESENT ON LINUX)
+    // tty.c_oflag &= ~ONOEOT; // Prevent removal of C-d chars (0x004) in output (NOT PRESENT ON LINUX)
 
-        if (response)
+    tty.c_cc[VTIME] = 10;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
+    tty.c_cc[VMIN] = 0;
+
+    // Set in/out baud rate to be 115200
+    cfsetispeed(&tty, B115200);
+    cfsetospeed(&tty, B115200);
+
+    // Save tty settings, also checking for error
+    if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
+        printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
+        return 1;
+    }
+
+    Queue<std::string> lines;
+
+    std::jthread user_input_thread {
+        [&lines] () 
         {
-            try
-            {
-                auto obj { json::parse(response->body) };
-                access_token_ch.send(std::string(obj[0]["access_token"]));
-            }
-            catch (...)
-            {
-
-            }
-        }
-    });
-
-    std::jthread client_thread { 
-        [&account_client, &access_token_ch] () 
-        {
-            httplib::Client client { "https://api.spotify.com" };
-
-            std::optional<std::string> redirect_link;
-            while (!redirect_link)
-            {
-                if (redirect_link = reauthorize_user(account_client))
-                    std::cout << *redirect_link << '\n';
-                else
-                    usleep(500'000);
-            }
-
             while (true)
             {
-                std::optional<std::string> access_token;
-
-                while (!access_token)
-                {
-                    if (access_token = access_token_ch.receive())
-                        std::cout << "\nNew Access Token: " << *access_token << '\n';
-                    else
-                        usleep(500'000);
-                }
-
-                std::string recent_track_id;
-
-                while (auto track_response = request_track_info(client, *access_token))
-                {
-                    auto res { parse_current_track(*track_response) };
-
-                    if (auto* current_track = std::get_if<CurrentTrack>(&res))
-                    {
-                        std::stringstream track_info;
-
-                        track_info << "Now playing " << current_track->name
-                                   << "\nBy " << current_track->artist_names.front(); 
-                        for (auto const& name : std::ranges::subrange(current_track->artist_names.begin() + 1, current_track->artist_names.end()))
-                            track_info << ", " << name;
-
-                        track_info << "\n\nTrack Info\n\n" << get_track_analysis(client, *access_token, current_track->id);
-
-                        if (recent_track_id != current_track->id)
-                        {
-                            recent_track_id = current_track->id;
-                            display(track_info.str());
-                        }
-                    }
-                    else if (auto* err = std::get_if<ResponseError>(&res))
-                    {
-                        recent_track_id = "";
-                        switch (*err) 
-                        {
-                        case ResponseError::NoContent:
-                            display("No currently active track");
-                            break;
-                        case ResponseError::ParseFailure:
-                            display("Failed to parse current track response");
-                            break;
-                        default:
-                            display("InternalError: Unhandled ResponseError when requesting current track");
-                            break;
-                        }
-                    }
-
-                    usleep(500'000);
-                }
-            } 
-        } 
+                std::string line;
+                std::cin >> line;
+                line.append(1, '\0');
+                lines.send(line);
+            }
+        }
     };
 
-    svr.listen("127.0.0.1", 8080);
+    while (true)
+    {
+        // Allocate memory for read buffer, set size according to your needs
+        std::array<char, 256> read_buf;
+        std::ranges::fill(read_buf, '\0');
 
-    return 0;
+        // Read bytes. The behaviour of read() (e.g. does it block?,
+        // how long does it block for?) depends on the configuration
+        // settings above, specifically VMIN and VTIME
+        const int num_bytes = read(serial_port, read_buf.data(), read_buf.size());
+        read_buf[std::clamp(0, 255, num_bytes)] = '\0';
+
+        if (num_bytes > 0)
+            printf("Echo: %s\n", read_buf.data());
+
+        while (auto line = lines.receive())
+        {
+            std::array<char, 256> output { '\0' };
+            std::ranges::copy_n(line->begin(), std::min(output.size(), line->size()), output.begin());
+            write(serial_port, output.data(), output.size());
+        }
+
+        // n is the number of bytes read. n may be 0 if no bytes were received, and can also be -1 to signal an error.
+        if (num_bytes < 0) {
+            printf("Error reading: %s", strerror(errno));
+            close(serial_port);
+            return 1;
+        }
+    }
+
+    close(serial_port);
+    return 0; // success
 }
